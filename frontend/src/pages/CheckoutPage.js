@@ -1,5 +1,5 @@
 // src/pages/CheckoutPage.js - Shipping address form + place order
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import api from '../api/axios';
@@ -15,6 +15,13 @@ const CheckoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Redirect to cart if there are no items (useEffect avoids navigating during render)
+  useEffect(() => {
+    if (!cartItems || cartItems.length === 0) {
+      navigate('/cart');
+    }
+  }, [cartItems, navigate]);
+
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
     setError('');
@@ -29,20 +36,28 @@ const CheckoutPage = () => {
         shippingAddress: { address, city, postalCode, country },
       };
 
-      const { data } = await api.post('/orders', orderData);
+      console.debug('Placing order payload:', orderData);
+
+      const response = await api.post('/orders', orderData);
+      console.debug('Place order response:', response.status, response.data);
+
+      // clear cart locally
       clearCart();
-      navigate(`/orders`);
+
+      // If server returned an order id navigate to its page, otherwise go to orders list
+      const data = response.data;
+      if (data && data._id) {
+        navigate(`/orders/${data._id}`);
+      } else {
+        navigate('/orders');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to place order. Please try again.');
+      console.error('Order creation failed:', err);
+      setError(err.response?.data?.message || err.message || 'Failed to place order. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
-  if (cartItems.length === 0) {
-    navigate('/cart');
-    return null;
-  }
 
   return (
     <div className="container">
@@ -107,7 +122,7 @@ const CheckoutPage = () => {
         {/* Order Summary */}
         <div className="cart-summary">
           <h2>Your Order</h2>
-          {cartItems.map((item) => (
+          {cartItems && cartItems.map((item) => (
             <div key={item._id} className="summary-row">
               <span>{item.name} × {item.quantity}</span>
               <span>${(item.price * item.quantity).toFixed(2)}</span>
@@ -116,7 +131,7 @@ const CheckoutPage = () => {
           <hr style={{ margin: '12px 0', borderColor: '#eee' }} />
           <div className="summary-row total">
             <span>Total</span>
-            <span>${cartTotal.toFixed(2)}</span>
+            <span>${(cartTotal || 0).toFixed(2)}</span>
           </div>
         </div>
       </div>
